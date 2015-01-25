@@ -1,23 +1,10 @@
 module Google.Drive.Realtime
-  ( State(..)
-  , Client
-  , client
+  ( model
   ) where
 
 import Native.Google.Drive.Realtime
-import Signal
-import Signal (Signal, Channel)
+import Google
+import Signal (Signal)
 
-type State
-  = Initializing
-  | ReadyToAuthenticate
-  | Authenticated
-
-type alias Client =
-  { model: Signal (Maybe String)
-  , authorize: Channel ()
-  , state : Signal State
-  }
-
-client : String -> Client
-client = Native.Google.Drive.Realtime.client
+model : String -> Google.Module (Maybe String)
+model = Native.Google.Drive.Realtime.model
