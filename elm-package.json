@@ -1,7 +1,7 @@
 {
     "version": "1.0.0",
-    "summary": "{{ description }}",
-    "repository": "https://github.com/{{ github_user }}/{{ project }}.git",
+    "summary": "Elm bindings for Google Drive Realtime API",
+    "repository": "https://github.com/avh4/elm-realtime-drive.git",
     "license": "BSD3",
     "source-directories": [
         "src"
