@@ -9,9 +9,11 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
   if (elm.Native.Google.Drive.Realtime.values) return elm.Native.Google.Drive.Realtime.values;
 
   // Imports
-  var Signal = Elm.Native.Signal.make(elm);
+  var Signal = Elm.Native.Signal.make(elm); // TODO: can we use Elm.Signal instead of Native?
 
-  var canAuthorize = Signal.constant(false); // TODO: this should be per-client
+  // TODO: these should be per-client
+  var stateSignal = Signal.constant({ ctor: "Initializing" });
+  var authorizeChannel = Signal.input({ctor: "_Tuple0" });
 
   // From https://developers.google.com/drive/realtime/realtime-quickstart
   /**
@@ -132,36 +134,40 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
 
   /**
    * Start the authorization process.
-   * @param onAuthComplete {Function} to call once authorization has completed.
    */
-  rtclient.Authorizer.prototype.start = function(onAuthComplete) {
+  rtclient.Authorizer.prototype.start = function() {
     var _this = this;
     gapi.load('auth:client,drive-realtime,drive-share', function() {
-      _this.authorize(onAuthComplete);
+      _this.authorize();
     });
   }
 
+  rtclient.Authorizer.prototype.onAuthComplete = function() {
+    console.log("Authed!", arguments);
+  };
+
+  rtclient.Authorizer.prototype.handleAuthResult = function(authResult) {
+    if (authResult && !authResult.error) {
+      elm.notify(stateSignal.id, {ctor: "Authenticated"});
+      this.fetchUserId(this.onAuthComplete.bind(this));
+    } else {
+      console.log('elm-realtime-drive', 'Auth failure', authResult);
+      elm.notify(stateSignal.id, {ctor: "ReadyToAuthenticate"});
+      this.triedWithoutPopups = true;
+    }
+  };
 
   /**
    * Reauthorize the client with no callback (used for authorization failure).
-   * @param onAuthComplete {Function} to call once authorization has completed.
    */
-  rtclient.Authorizer.prototype.authorize = function(onAuthComplete) {
+  rtclient.Authorizer.prototype.authorize = function() {
     var clientId = this.clientId;
     var userId = this.userId;
     var _this = this;
 
-    var handleAuthResult = function(authResult) {
-      if (authResult && !authResult.error) {
-        elm.notify(canAuthorize.id, false);
-        _this.fetchUserId(onAuthComplete);
-      } else {
-        elm.notify(canAuthorize.id, true);
-        // _this.authButton.onclick = authorizeWithPopup;
-      }
-    };
-
-    var authorizeWithPopup = function() {
+    if (!this.triedWithoutPopups) {
+      // Try with no popups first.
+      console.log("elm-realtime-drive", "Authorizing", { clientId: clientId, userId: userId });
       gapi.auth.authorize({
         client_id: clientId,
         scope: [
@@ -170,22 +176,21 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
           rtclient.OPENID_SCOPE
         ],
         user_id: userId,
+        immediate: true
+      }, this.handleAuthResult.bind(this));
+    } else {
+      console.log("elm-realtime-drive", "Authorizing with popup", { clientId: this.clientId, userId: this.userId });
+      gapi.auth.authorize({
+        client_id: this.clientId,
+        scope: [
+          rtclient.INSTALL_SCOPE,
+          rtclient.FILE_SCOPE,
+          rtclient.OPENID_SCOPE
+        ],
+        user_id: this.userId,
         immediate: false
-      }, handleAuthResult);
-      console.log(clientId);
-    };
-
-    // Try with no popups first.
-    gapi.auth.authorize({
-      client_id: clientId,
-      scope: [
-        rtclient.INSTALL_SCOPE,
-        rtclient.FILE_SCOPE,
-        rtclient.OPENID_SCOPE
-      ],
-      user_id: userId,
-      immediate: true
-    }, handleAuthResult);
+      }, this.handleAuthResult.bind(this));
+    }
   }
 
 
@@ -525,14 +530,26 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
       afterAuth: null // No action.
     };
 
-    function startRealtime() {
-      var realtimeLoader = new rtclient.RealtimeLoader(realtimeOptions);
-      realtimeLoader.start();
-    }
+    var realtimeLoader = new rtclient.RealtimeLoader(realtimeOptions);
 
-    startRealtime();
+    function authClickHandler(unit) {
+      console.log("Requested auth", stateSignal.value);
+      if (stateSignal.value.ctor == 'ReadyToAuthenticate') {
+        console.log("elm-realtime-drive: Authenticating...");
+        realtimeLoader.authorizer.authorize();
+      } else {
+        console.log("elm-realtime-drive: Auth was requested, but current state is " + stateSignal.value.ctor);
+      }
+    };
 
-    return { enableAuthorizeButton: canAuthorize };
+    A2( Signal.map, authClickHandler, authorizeChannel);
+
+    realtimeLoader.start();
+
+    return {
+      authorize: authorizeChannel,
+      state: stateSignal
+    };
   }
 
   return elm.Native.Google.Drive.Realtime.values = {

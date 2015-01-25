@@ -8,9 +8,11 @@ import Google.Drive.Realtime as Realtime
 
 realtime = Realtime.client "62036537683-2uohqnr6titmrhm6q96q8kc182ahphf0.apps.googleusercontent.com"
 
-scene canAuthorize = flow down
-  [ Text.asText realtime
-  , if canAuthorize then button (Signal.send realtime.authorize ()) "Authorize" else Text.asText "Waiting for Google..."
+scene state = flow down
+  [ case state of
+      Realtime.ReadyToAuthenticate ->
+        button (Signal.send realtime.authorize ()) "Authorize"
+      _ -> Text.asText state
   ]
 
-main = Signal.map scene realtime.enableAuthorizeButton
+main = Signal.map scene realtime.state
