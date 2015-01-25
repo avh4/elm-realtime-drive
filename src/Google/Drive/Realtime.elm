@@ -14,7 +14,7 @@ type State
   | Authenticated
 
 type alias Client =
-  { model: String -> Signal String
+  { model: Signal (Maybe String)
   , authorize: Channel ()
   , state : Signal State
   }

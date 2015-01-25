@@ -14,6 +14,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
   // TODO: these should be per-client
   var stateSignal = Signal.constant({ ctor: "Initializing" });
   var authorizeChannel = Signal.input({ctor: "_Tuple0" });
+  var modelSignal = Signal.constant({ ctor: "Nothing" });
 
   // From https://developers.google.com/drive/realtime/realtime-quickstart
   /**
@@ -135,21 +136,19 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
   /**
    * Start the authorization process.
    */
-  rtclient.Authorizer.prototype.start = function() {
+  rtclient.Authorizer.prototype.start = function(onAuthComplete) {
     var _this = this;
+    this.onAuthComplete = onAuthComplete;
     gapi.load('auth:client,drive-realtime,drive-share', function() {
       _this.authorize();
     });
   }
 
-  rtclient.Authorizer.prototype.onAuthComplete = function() {
-    console.log("Authed!", arguments);
-  };
-
   rtclient.Authorizer.prototype.handleAuthResult = function(authResult) {
     if (authResult && !authResult.error) {
+      console.log("Authed!", arguments);
       elm.notify(stateSignal.id, {ctor: "Authenticated"});
-      this.fetchUserId(this.onAuthComplete.bind(this));
+      this.fetchUserId(this.onAuthComplete);
     } else {
       console.log('elm-realtime-drive', 'Auth failure', authResult);
       elm.notify(stateSignal.id, {ctor: "ReadyToAuthenticate"});
@@ -298,6 +297,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
    * @param userId {string} the ID of the user.
    */
   rtclient.RealtimeLoader.prototype.redirectTo = function(fileIds, userId) {
+    console.log(">>> rtclient.RealtimeLoader.redirectTo", arguments);
     var params = [];
     if (fileIds) {
       params.push('fileIds=' + fileIds.join(','));
@@ -326,6 +326,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
    * Starts the loader by authorizing.
    */
   rtclient.RealtimeLoader.prototype.start = function() {
+    console.log(">>> rtclient.RealtimeLoader.start", arguments);
     // Bind to local context to make them suitable for callbacks.
     var _this = this;
     this.authorizer.start(function() {
@@ -344,6 +345,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
    * Handles errors thrown by the Realtime API.
    */
   rtclient.RealtimeLoader.prototype.handleErrors = function(e) {
+    console.log(">>> rtclient.RealtimeLoader.handleErrors", arguments);
     if(e.type == gapi.drive.realtime.ErrorType.TOKEN_REFRESH_REQUIRED) {
       authorizer.authorize();
     } else if(e.type == gapi.drive.realtime.ErrorType.CLIENT_ERROR) {
@@ -361,6 +363,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
    * parameters.
    */
   rtclient.RealtimeLoader.prototype.load = function() {
+    console.log(">>> rtclient.RealtimeLoader.load", arguments);
     var fileIds = rtclient.params['fileIds'];
     if (fileIds) {
       fileIds = fileIds.split(',');
@@ -429,6 +432,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
      * @param model {gapi.drive.realtime.Model} the Realtime root model object.
      */
     function initializeModel(model) {
+      console.log(">>> initializeModel", arguments);
       var string = model.createString('Hello Realtime World!');
       model.getRoot().set('text', string);
     }
@@ -441,27 +445,25 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
      * @param doc {gapi.drive.realtime.Document} the Realtime document.
      */
     function onFileLoaded(doc) {
+      console.log(">>> onFileLoaded", arguments);
       var string = doc.getModel().getRoot().get('text');
 
       // Keeping one box updated with a String binder.
       var textArea1 = document.getElementById('editor1');
       gapi.drive.realtime.databinding.bindString(string, textArea1);
 
-      // Keeping one box updated with a custom EventListener.
-      var textArea2 = document.getElementById('editor2');
-      var updateTextArea2 = function(e) {
-        textArea2.value = string;
+      var updateSignal = function(e) {
+        elm.notify(modelSignal.id, { ctor: "Just", _0: string.text });
       };
-      string.addEventListener(gapi.drive.realtime.EventType.TEXT_INSERTED, updateTextArea2);
-      string.addEventListener(gapi.drive.realtime.EventType.TEXT_DELETED, updateTextArea2);
-      textArea2.onkeyup = function() {
-        string.setText(textArea2.value);
-      };
-      updateTextArea2();
+      string.addEventListener(gapi.drive.realtime.EventType.TEXT_INSERTED, updateSignal);
+      string.addEventListener(gapi.drive.realtime.EventType.TEXT_DELETED, updateSignal);
+      // textArea2.onkeyup = function() {
+      //   string.setText(textArea2.value);
+      // };
+      updateSignal();
 
       // Enabling UI Elements.
       textArea1.disabled = false;
-      textArea2.disabled = false;
 
       // Add logic for undo button.
       var model = doc.getModel();
@@ -547,6 +549,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
     realtimeLoader.start();
 
     return {
+      model: modelSignal,
       authorize: authorizeChannel,
       state: stateSignal
     };
