@@ -307,7 +307,7 @@ Elm.Native.Google.Drive.Realtime.make = function(elm) {
     }
 
     // Naive URL construction.
-    var newUrl = params.length == 0 ? './' : ('./#' + params.join('&'));
+    var newUrl = params.length == 0 ? '#' : ('#' + params.join('&'));
     // Using HTML URL re-write if available.
     if (window.history && window.history.replaceState) {
       window.history.replaceState("Google Drive Realtime API Playground", "Google Drive Realtime API Playground", newUrl);
